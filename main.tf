@@ -10,11 +10,11 @@ terraform {
 }
 
 provider "aws" {
-  region = var.AWS_REGION
+  region = var.aws_region
 }
 
 locals {
-  availability_zones = ["${var.AWS_REGION}a", "${var.AWS_REGION}b"]
+  availability_zones = ["${var.aws_region}a", "${var.aws_region}b"]
 }
 
 # VPC
@@ -37,22 +37,30 @@ resource "aws_internet_gateway" "ig" {
   }
 }
 
-# Elastic-IP (eip) for NAT
-resource "aws_eip" "nat_eip" {
-  vpc        = true
-  depends_on = [aws_internet_gateway.ig]
+module "bastion" {
+  source  = "Guimove/bastion/aws"
+  version = "3.0.2"
+  auto_scaling_group_subnets = [
+    
+  ]
 }
 
-# NAT Gateway
-resource "aws_nat_gateway" "nat" {
-  allocation_id = aws_eip.nat_eip.id
-  subnet_id     = element(aws_subnet.public_subnet.*.id, 0)
+# # Elastic-IP (eip) for NAT
+# resource "aws_eip" "nat_eip" {
+#   vpc        = true
+#   depends_on = [aws_internet_gateway.ig]
+# }
 
-  tags = {
-    Name        = "nat"
-    Environment = "${var.environment}"
-  }
-}
+# # NAT Gateway
+# resource "aws_nat_gateway" "nat" {
+#   allocation_id = aws_eip.nat_eip.id
+#   subnet_id     = element(aws_subnet.public_subnet.*.id, 0)
+
+#   tags = {
+#     Name        = "nat"
+#     Environment = "${var.environment}"
+#   }
+# }
 
 # Public subnet
 resource "aws_subnet" "public_subnet" {
