@@ -192,30 +192,30 @@ resource "aws_security_group" "private" {
   }
 }
 
-# resource "aws_instance" "app_server" {
-#   ami                    = "ami-007855ac798b5175e"
-#   instance_type          = "t2.micro"
-#   key_name               = "javatodev-app-key"
-#   count                  = length(var.private_subnets_cidr)
-#   subnet_id              = element(aws_subnet.private_subnet.*.id, count.index)
-#   vpc_security_group_ids = [aws_security_group.private.id]
-#   tags = {
-#     name = "app_server"
-#   }
-# }
+resource "aws_instance" "app_server" {
+  ami                    = "ami-007855ac798b5175e"
+  instance_type          = "t2.micro"
+  key_name               = "javatodev-app-key"
+  count                  = length(var.private_subnets_cidr)
+  subnet_id              = element(aws_subnet.private_subnet.*.id, count.index)
+  vpc_security_group_ids = [aws_security_group.private.id]
+  tags = {
+    name = "app_server"
+  }
+}
 
-# resource "aws_instance" "web_server" {
-#   ami                    = "ami-007855ac798b5175e"
-#   instance_type          = "t2.micro"
-#   key_name               = "javatodev-app-key"
-#   count                  = length(var.public_subnets_cidr)
-#   subnet_id              = element(aws_subnet.public_subnet.*.id, count.index)
-#   vpc_security_group_ids = [aws_security_group.public.id]
-#   tags = {
-#     name        = "web_server"
-#     Environment = "${var.environment}"
-#   }
-# }
+resource "aws_instance" "web_server" {
+  ami                    = "ami-007855ac798b5175e"
+  instance_type          = "t2.micro"
+  key_name               = "javatodev-app-key"
+  count                  = length(var.public_subnets_cidr)
+  subnet_id              = element(aws_subnet.public_subnet.*.id, count.index)
+  vpc_security_group_ids = [aws_security_group.public.id]
+  tags = {
+    name        = "web_server"
+    Environment = "${var.environment}"
+  }
+}
 
 resource "aws_s3_bucket" "load_balancer_log" {
   bucket        = "${var.environment}-load-balancer-log"
@@ -255,8 +255,8 @@ resource "aws_lb" "app_load_balancer" {
   depends_on = [
     aws_s3_bucket.load_balancer_log
   ]
-  subnets = [for subnet in aws_subnet.public_subnet : subnet.id]
-
+  security_groups = [aws_security_group.public.id]
+  subnets         = [for subnet in aws_subnet.public_subnet : subnet.id]
   access_logs {
     bucket  = "${var.environment}-load-balancer-log"
     prefix  = "logs"
@@ -268,4 +268,24 @@ resource "aws_lb" "app_load_balancer" {
     Environment = "${var.environment}"
   }
 
+}
+
+resource "aws_lb_listener" "app_load_balancer" {
+  load_balancer_arn = aws_lb.app_load_balancer.arn
+  port              = "80"
+  protocol          = "HTTP"
+
+  depends_on = [
+    aws_lb.app_load_balancer
+  ]
+
+  default_action {
+    type = "fixed-response"
+
+    fixed_response {
+      content_type = "text/plain"
+      message_body = "Fixed response content"
+      status_code  = "200"
+    }
+  }
 }
