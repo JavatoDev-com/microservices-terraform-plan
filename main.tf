@@ -200,7 +200,8 @@ resource "aws_instance" "app_server" {
   subnet_id              = element(aws_subnet.private_subnet.*.id, count.index)
   vpc_security_group_ids = [aws_security_group.private.id]
   tags = {
-    name = "app_server"
+    Name = "app_server-${count.index}"
+    Environment = "${var.environment}"
   }
 }
 
@@ -212,7 +213,7 @@ resource "aws_instance" "web_server" {
   subnet_id              = element(aws_subnet.public_subnet.*.id, count.index)
   vpc_security_group_ids = [aws_security_group.public.id]
   tags = {
-    name        = "web_server"
+    Name        = "web_server-${count.index}"
     Environment = "${var.environment}"
   }
 }
@@ -221,7 +222,7 @@ resource "aws_s3_bucket" "load_balancer_log" {
   bucket        = "${var.environment}-load-balancer-log"
   force_destroy = true
   tags = {
-    name        = "${var.environment}-load-balancer-log"
+    Name        = "${var.environment}-load-balancer-log"
     Environment = "${var.environment}"
   }
 }
@@ -265,7 +266,7 @@ resource "aws_lb" "app_load_balancer" {
   }
 
   tags = {
-    name        = "${var.environment}-load-balancer"
+    Name        = "${var.environment}-load-balancer"
     Environment = "${var.environment}"
   }
 
