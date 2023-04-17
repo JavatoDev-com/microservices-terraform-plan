@@ -37,22 +37,21 @@ resource "aws_internet_gateway" "ig" {
   }
 }
 
-# Elastic-IP (eip) for NAT
-resource "aws_eip" "nat_eip" {
-  vpc        = true
-  depends_on = [aws_internet_gateway.ig]
-}
+# # Elastic-IP (eip) for NAT
+# resource "aws_eip" "nat_eip" {
+#   vpc        = true
+#   depends_on = [aws_internet_gateway.ig]
+# }
 
-# NAT Gateway
-resource "aws_nat_gateway" "nat" {
-  allocation_id = aws_eip.nat_eip.id
-  subnet_id     = element(aws_subnet.public_subnet.*.id, 0)
-
-  tags = {
-    Name        = "nat"
-    Environment = "${var.environment}"
-  }
-}
+# # NAT Gateway
+# resource "aws_nat_gateway" "nat" {
+#   allocation_id = aws_eip.nat_eip.id
+#   subnet_id     = element(aws_subnet.public_subnet.*.id, 0)
+#   tags = {
+#     Name        = "nat-gateway-${var.environment}"
+#     Environment = "${var.environment}"
+#   }
+# }
 
 # Public subnet
 resource "aws_subnet" "public_subnet" {
@@ -193,26 +192,80 @@ resource "aws_security_group" "private" {
   }
 }
 
-resource "aws_instance" "app_server" {
-  ami                    = "ami-007855ac798b5175e"
-  instance_type          = "t2.micro"
-  key_name               = "javatodev-app-key"
-  count                  = length(var.private_subnets_cidr)
-  subnet_id              = element(aws_subnet.private_subnet.*.id, count.index)
-  vpc_security_group_ids = [aws_security_group.private.id]
+# resource "aws_instance" "app_server" {
+#   ami                    = "ami-007855ac798b5175e"
+#   instance_type          = "t2.micro"
+#   key_name               = "javatodev-app-key"
+#   count                  = length(var.private_subnets_cidr)
+#   subnet_id              = element(aws_subnet.private_subnet.*.id, count.index)
+#   vpc_security_group_ids = [aws_security_group.private.id]
+#   tags = {
+#     name = "app_server"
+#   }
+# }
+
+# resource "aws_instance" "web_server" {
+#   ami                    = "ami-007855ac798b5175e"
+#   instance_type          = "t2.micro"
+#   key_name               = "javatodev-app-key"
+#   count                  = length(var.public_subnets_cidr)
+#   subnet_id              = element(aws_subnet.public_subnet.*.id, count.index)
+#   vpc_security_group_ids = [aws_security_group.public.id]
+#   tags = {
+#     name        = "web_server"
+#     Environment = "${var.environment}"
+#   }
+# }
+
+resource "aws_s3_bucket" "load_balancer_log" {
+  bucket        = "${var.environment}-load-balancer-log"
+  force_destroy = true
   tags = {
-    name = "app_server"
+    name        = "${var.environment}-load-balancer-log"
+    Environment = "${var.environment}"
   }
 }
 
-resource "aws_instance" "web_server" {
-  ami                    = "ami-007855ac798b5175e"
-  instance_type          = "t2.micro"
-  key_name               = "javatodev-app-key"
-  count                  = length(var.public_subnets_cidr)
-  subnet_id              = element(aws_subnet.public_subnet.*.id, count.index)
-  vpc_security_group_ids = [aws_security_group.public.id]
-  tags = {
-    name = "web_server"
+resource "aws_s3_bucket_policy" "grant_access_to_lb" {
+  bucket = "${var.environment}-load-balancer-log"
+  policy = data.aws_iam_policy_document.allow_access_from_lb.json
+}
+
+data "aws_iam_policy_document" "allow_access_from_lb" {
+  statement {
+    principals {
+      type        = "AWS"
+      identifiers = ["*"]
+    }
+
+    actions = [
+      "s3:*"
+    ]
+
+    resources = [
+      aws_s3_bucket.load_balancer_log.arn,
+      "${aws_s3_bucket.load_balancer_log.arn}/*",
+    ]
   }
+}
+
+resource "aws_lb" "app_load_balancer" {
+  name               = "${var.environment}-load-balancer"
+  load_balancer_type = "application"
+  depends_on = [
+    aws_s3_bucket.load_balancer_log
+  ]
+  subnets = [for subnet in aws_subnet.public_subnet : subnet.id]
+
+  access_logs {
+    bucket  = "${var.environment}-load-balancer-log"
+    prefix  = "logs"
+    enabled = true
+  }
+
+  tags = {
+    name        = "${var.environment}-load-balancer"
+    Environment = "${var.environment}"
+  }
+
 }
