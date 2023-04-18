@@ -37,21 +37,21 @@ resource "aws_internet_gateway" "ig" {
   }
 }
 
-# # Elastic-IP (eip) for NAT
-# resource "aws_eip" "nat_eip" {
-#   vpc        = true
-#   depends_on = [aws_internet_gateway.ig]
-# }
+# Elastic-IP (eip) for NAT
+resource "aws_eip" "nat_eip" {
+  vpc        = true
+  depends_on = [aws_internet_gateway.ig]
+}
 
-# # NAT Gateway
-# resource "aws_nat_gateway" "nat" {
-#   allocation_id = aws_eip.nat_eip.id
-#   subnet_id     = element(aws_subnet.public_subnet.*.id, 0)
-#   tags = {
-#     Name        = "nat-gateway-${var.environment}"
-#     Environment = "${var.environment}"
-#   }
-# }
+# NAT Gateway
+resource "aws_nat_gateway" "nat" {
+  allocation_id = aws_eip.nat_eip.id
+  subnet_id     = element(aws_subnet.public_subnet.*.id, 0)
+  tags = {
+    Name        = "nat-gateway-${var.environment}"
+    Environment = "${var.environment}"
+  }
+}
 
 # Public subnet
 resource "aws_subnet" "public_subnet" {
@@ -84,7 +84,6 @@ resource "aws_subnet" "private_subnet" {
 # Routing tables to route traffic for Private Subnet
 resource "aws_route_table" "private" {
   vpc_id = aws_vpc.vpc.id
-
   tags = {
     Name        = "${var.environment}-private-route-table"
     Environment = "${var.environment}"
@@ -199,7 +198,16 @@ resource "aws_instance" "app_server" {
   count                  = length(var.private_subnets_cidr)
   subnet_id              = element(aws_subnet.private_subnet.*.id, count.index)
   vpc_security_group_ids = [aws_security_group.private.id]
-
+  user_data              = <<EOF
+  #!/bin/bash
+  # Use this for your user data (script from top to bottom)
+  # install httpd (Linux 2 version)
+  yum update -y
+  yum install -y httpd
+  systemctl start httpd
+  systemctl enable httpd
+  echo "<h1>Hello World from $(hostname -f)</h1>" > /var/www/html/index.html
+  EOF
   tags = {
     Name        = "app_server-${count.index}"
     Environment = "${var.environment}"
@@ -251,57 +259,57 @@ data "aws_iam_policy_document" "allow_access_from_lb" {
   }
 }
 
-# resource "aws_lb" "app_load_balancer" {
-#   name               = "${var.environment}-load-balancer"
-#   load_balancer_type = "application"
-#   depends_on = [
-#     aws_s3_bucket.load_balancer_log
-#   ]
-#   enable_cross_zone_load_balancing = "true"
-#   security_groups                  = [aws_security_group.public.id]
-#   subnets                          = [for subnet in aws_subnet.public_subnet : subnet.id]
-#   access_logs {
-#     bucket  = "${var.environment}-load-balancer-log"
-#     prefix  = "logs"
-#     enabled = true
-#   }
+resource "aws_lb" "app_load_balancer" {
+  name               = "${var.environment}-load-balancer"
+  load_balancer_type = "application"
+  depends_on = [
+    aws_s3_bucket.load_balancer_log
+  ]
+  enable_cross_zone_load_balancing = "true"
+  security_groups                  = [aws_security_group.public.id]
+  subnets                          = [for subnet in aws_subnet.public_subnet : subnet.id]
+  access_logs {
+    bucket  = "${var.environment}-load-balancer-log"
+    prefix  = "logs"
+    enabled = true
+  }
 
-#   tags = {
-#     Name        = "${var.environment}-load-balancer"
-#     Environment = "${var.environment}"
-#   }
+  tags = {
+    Name        = "${var.environment}-load-balancer"
+    Environment = "${var.environment}"
+  }
 
-# }
+}
 
-# resource "aws_lb_listener" "app_load_balancer" {
-#   load_balancer_arn = aws_lb.app_load_balancer.arn
-#   port              = "80"
-#   protocol          = "HTTP"
+resource "aws_lb_listener" "app_load_balancer" {
+  load_balancer_arn = aws_lb.app_load_balancer.arn
+  port              = "80"
+  protocol          = "HTTP"
 
-#   depends_on = [
-#     aws_lb.app_load_balancer
-#   ]
+  depends_on = [
+    aws_lb.app_load_balancer
+  ]
 
-#   default_action {
-#     type             = "forward"
-#     target_group_arn = aws_lb_target_group.lb_tg.id
-#   }
-# }
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.lb_tg.id
+  }
+}
 
-# resource "aws_lb_target_group_attachment" "app_server" {
-#   target_group_arn = aws_lb_target_group.lb_tg.arn
-#   count            = length(aws_instance.app_server)
-#   target_id        = element(aws_instance.app_server.*.id, count.index)
-#   port             = 80
-# }
+resource "aws_lb_target_group_attachment" "app_server" {
+  target_group_arn = aws_lb_target_group.lb_tg.arn
+  count            = length(aws_instance.app_server)
+  target_id        = element(aws_instance.app_server.*.id, count.index)
+  port             = 80
+}
 
-# resource "aws_lb_target_group" "lb_tg" {
-#   name = "${var.environment}-lb-target-group"
-#   health_check {
-#     path = ""
-#     port = 80
-#   }
-#   port     = 80
-#   protocol = "HTTP"
-#   vpc_id   = aws_vpc.vpc.id
-# }
+resource "aws_lb_target_group" "lb_tg" {
+  name = "${var.environment}-lb-target-group"
+  health_check {
+    path = ""
+    port = 80
+  }
+  port     = 80
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.vpc.id
+}
