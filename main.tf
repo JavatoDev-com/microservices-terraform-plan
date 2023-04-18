@@ -107,6 +107,13 @@ resource "aws_route" "public_internet_gateway" {
   gateway_id             = aws_internet_gateway.ig.id
 }
 
+# Route for NAT Gateway
+resource "aws_route" "private_internet_gateway" {
+  route_table_id         = aws_route_table.private.id
+  destination_cidr_block = "0.0.0.0/0"
+  gateway_id             = aws_nat_gateway.nat.id
+}
+
 # Route table associations for both Public & Private Subnets
 resource "aws_route_table_association" "public" {
   count          = length(var.public_subnets_cidr)
@@ -198,16 +205,6 @@ resource "aws_instance" "app_server" {
   count                  = length(var.private_subnets_cidr)
   subnet_id              = element(aws_subnet.private_subnet.*.id, count.index)
   vpc_security_group_ids = [aws_security_group.private.id]
-  user_data              = <<EOF
-  #!/bin/bash
-  # Use this for your user data (script from top to bottom)
-  # install httpd (Linux 2 version)
-  yum update -y
-  yum install -y httpd
-  systemctl start httpd
-  systemctl enable httpd
-  echo "<h1>Hello World from $(hostname -f)</h1>" > /var/www/html/index.html
-  EOF
   tags = {
     Name        = "app_server-${count.index}"
     Environment = "${var.environment}"
