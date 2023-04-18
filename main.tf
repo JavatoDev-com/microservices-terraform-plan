@@ -200,7 +200,7 @@ resource "aws_instance" "app_server" {
   subnet_id              = element(aws_subnet.private_subnet.*.id, count.index)
   vpc_security_group_ids = [aws_security_group.private.id]
   tags = {
-    Name = "app_server-${count.index}"
+    Name        = "app_server-${count.index}"
     Environment = "${var.environment}"
   }
 }
@@ -257,8 +257,8 @@ resource "aws_lb" "app_load_balancer" {
     aws_s3_bucket.load_balancer_log
   ]
   enable_cross_zone_load_balancing = "true"
-  security_groups = [aws_security_group.public.id]
-  subnets         = [for subnet in aws_subnet.public_subnet : subnet.id]
+  security_groups                  = [aws_security_group.public.id]
+  subnets                          = [for subnet in aws_subnet.public_subnet : subnet.id]
   access_logs {
     bucket  = "${var.environment}-load-balancer-log"
     prefix  = "logs"
@@ -295,7 +295,7 @@ resource "aws_lb_target_group_attachment" "app_server" {
 }
 
 resource "aws_lb_target_group" "lb_tg" {
-  name     = "${var.environment}-lb-target-group"
+  name = "${var.environment}-lb-target-group"
   health_check {
     path = "/actuator/health"
     port = 8080
